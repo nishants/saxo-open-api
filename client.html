@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Watch Subscriptions</title>
+</head>
+<body>
+
+<div class="container">
+  <div class="form-group">
+    <label for="token">Streaming server url: </label>
+    <input id="url" onchange="updateValue('url', this.value)" class="form-control"/>
+  </div>
+
+  <div class="form-group">
+    <label for="token">ContextId: </label>
+    <input id="context-id" onchange="updateValue('contextId', this.value)" class="form-control"/>
+  </div>
+
+  <div class="form-group" id="token-form">
+    <label for="token">Token: </label>
+    <textarea id="token" onchange="updateValue('token', this.value)" class="form-control" style="height: 100px"></textarea>
+  </div>
+
+  <div class="form-group">
+    <button id="connect" onclick="connect()" class="btn btn-primary">Connect</button>
+    <button id="disconnect" onclick="disconnect()" hidden=true class="btn btn-warning">Disconnect</button>
+    <button id="clear-logs" onclick="clearLogs()" hidden=true class="btn">Clear</button>
+  </div>
+
+</div>
+
+<div class="container">
+  <ul id="messagesList" class="list-group"></ul>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/aspnet-signalr/1.1.4/signalr.min.js" integrity="sha512-hqwtOj6waHZZoLRoJoLn0tq34JS97tR1QmhM69uvyrt3LVBiR1o0xeOVAskjUFL1L1fahQH2W7IdcMaFbqCEaw==" crossorigin="anonymous"></script>
+
+<link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
+
+<script >
+  "use strict";
+  let pricingConnection ;
+
+  const showMessage = (content) => {
+    var li = document.createElement("li");
+    li.className = "list-group-item";
+    if(content instanceof Error){
+      li.innerHTML = `<p class="text-danger"><label>Error : </label>${JSON.stringify(content.message)}</p>`;
+    } else if(content.PayloadFormat === 1){
+      li.innerHTML = `<p>
+                <label>${atob(content.Payload)}</label>
+                </br>
+                <code class="text-muted">${JSON.stringify(content)}</code
+            </p>`;
+    }else{
+      li.innerHTML = `<label>${JSON.stringify(content)}</label>`;
+    }
+    document.getElementById("messagesList").prepend(li);
+  };
+
+
+  const subscribeToListener = async () => {
+    pricingConnection.stream("StartStreaming")
+      .subscribe({
+        next: showMessage,
+        error: showMessage,
+      });
+  };
+
+
+  const creatConnection = async ({token, onSuccess, streamingServerUrl, contextId }) => {
+    pricingConnection = new signalR.HubConnectionBuilder()
+      .withUrl(`${streamingServerUrl}?contextId=${contextId}`, { accessTokenFactory: () => token })
+      .build();
+    try{
+      await pricingConnection.start();
+      showMessage("Conncted with server");
+      await subscribeToListener();
+      onSuccess();
+    }catch(err){
+      showMessage("Failed to connect to server" + err.toString());
+    }
+  }
+
+  const stop = async () => {
+    await pricingConnection.stop();
+  }
+
+  const getSavedValue = (key) => {
+    return localStorage.getItem(key);
+  };
+
+  const saveValue = (key, value) => {
+    localStorage.setItem(key, value)
+  };
+
+  const updateUi = ({connected}) => {
+    document.getElementById("connect").hidden = connected;
+    document.getElementById("disconnect").hidden = !connected;
+    document.getElementById("clear-logs").hidden = !connected;
+    document.getElementById("token").value = getSavedValue('token');
+    document.getElementById("url").value = getSavedValue('url');
+    document.getElementById("context-id").value = getSavedValue('contextId');
+    document.getElementById("token").disabled = connected;
+    document.getElementById("context-id").disabled = connected;
+    document.getElementById("url").disabled = connected;
+  };
+
+  function clearLogs(){
+    document.getElementById("messagesList").innerText = '';
+  }
+
+  function connect(){
+    const token = getSavedValue('token');
+    const contextId = getSavedValue('contextId');
+    const streamingServerUrl = getSavedValue('url');
+
+    creatConnection({token, contextId, streamingServerUrl, onSuccess: () => updateUi({connected: true})});
+  }
+
+  function disconnect (){
+    if(confirm("End streaming session ?")){
+      stop().then(() => updateUi({connected: false}));
+    }
+  }
+
+  function updateValue (key, value){
+    saveValue(key, value);
+  }
+
+  updateUi({connected: false});
+
+</script>
+<link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap.min.css" integrity="sha384-BVYiiSIFeK1dGmJRAkycuHAHRg32OmUcww7on3RYdg4Va+PmSTsz/K68vbdEjh4u" crossorigin="anonymous">
+</body>
+</html>
